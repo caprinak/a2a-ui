@@ -1,0 +1,17 @@
+{
+  "name": "gemini-a2a-agent",
+  "version": "1.0.0",
+  "description": "Gemini A2A Agent Server (Node.js)",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "uuid": "^11.0.0"
+  }
+}
