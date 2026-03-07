@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { RefreshCw, Copy, Check } from "lucide-react";
 import { TraceSidebar } from "./TraceSidebar";
 import { useTrace } from "@/hooks/useTrace";
 import { useSettingsState } from "@/a2a/state/settings/settingsStateContext";
+import { ChatMessage } from "@/types/chat";
 
 interface ChatContainerProps {
     selectedAgent: AgentCard | null;
@@ -34,19 +35,38 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     const [tempContextId, setTempContextId] = useState<string>("");
     const [copied, setCopied] = useState<boolean>(false);
     const inputRef = useRef<HTMLTextAreaElement>(null);
-    
+
     const { appState, setAppState } = useAppState();
     const { settingsState } = useSettingsState();
-    
+
     // Получаем актуальную conversation из appState
-    const currentConversation = conversation ? 
-        appState.conversations.find(conv => conv.conversation_id === conversation.conversation_id) || conversation 
+    const currentConversation = conversation ?
+        appState.conversations.find(conv => conv.conversation_id === conversation.conversation_id) || conversation
         : null;
+
+    const conversationId = currentConversation?.conversation_id;
+
+    // Stable callback for persisting messages
+    const handleMessagesChange = useCallback((newMessages: ChatMessage[]) => {
+        if (conversationId) {
+            setAppState(prev => ({
+                ...prev,
+                conversation_messages: {
+                    ...prev.conversation_messages,
+                    [conversationId]: newMessages
+                }
+            }));
+        }
+    }, [conversationId, setAppState]);
 
     const { messages, isLoading, messagesEndRef, scrollToBottom, sendMessage } = useChat({
         agentUrl: selectedAgent?.url,
         isStreamingEnabled,
-        contextId: currentConversation?.context_id
+        contextId: currentConversation?.context_id,
+        initialMessages: conversationId
+            ? appState.conversation_messages[conversationId] || []
+            : [],
+        onMessagesChange: handleMessagesChange
     });
 
     const { trace, loading: traceLoading, error: traceError, projectId, availableProjects, refreshTrace } = useTrace({
@@ -64,17 +84,17 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 
     const handleSendMessage = async () => {
         if (!newMessage.trim() || isLoading) return;
-        
+
         const messageToSend = newMessage;
         setNewMessage("");
-        
+
         // Keep focus on input field for continuous typing
         setTimeout(() => {
             inputRef.current?.focus();
         }, 0);
 
         await sendMessage(messageToSend);
-        
+
         // Автоматически обновляем трейсы после отправки сообщения с задержкой
         // чтобы дать время для генерации трейсов на сервере
         if (refreshTrace) {
@@ -83,7 +103,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                 refreshTrace();
             }, 2000); // 2 секунды задержки для генерации трейсов
         }
-        
+
         // Return focus to input field after response
         setTimeout(() => {
             inputRef.current?.focus();
@@ -103,16 +123,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     // Функции для управления contextId
     const handleGenerateContextId = () => {
         if (!currentConversation) return;
-        
+
         const newContextId = uuidv4();
-        
+
         // Обновляем conversation в appState
         const updatedConversations = appState.conversations.map(conv =>
             conv.conversation_id === currentConversation.conversation_id
                 ? { ...conv, context_id: newContextId }
                 : conv
         );
-        
+
         setAppState({
             ...appState,
             conversations: updatedConversations
@@ -126,19 +146,19 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 
     const handleSaveContextId = () => {
         if (!currentConversation || !tempContextId.trim()) return;
-        
+
         // Обновляем conversation в appState
         const updatedConversations = appState.conversations.map(conv =>
             conv.conversation_id === currentConversation.conversation_id
                 ? { ...conv, context_id: tempContextId.trim() }
                 : conv
         );
-        
+
         setAppState({
             ...appState,
             conversations: updatedConversations
         });
-        
+
         setEditingContextId(false);
         setTempContextId("");
     };
@@ -150,7 +170,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
 
     const handleCopyContextId = async () => {
         if (!currentConversation?.context_id) return;
-        
+
         try {
             await navigator.clipboard.writeText(currentConversation.context_id);
             setCopied(true);
@@ -163,10 +183,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     return (
         <div className="flex h-full overflow-hidden min-h-0">
             {settingsState.arize_phoenix_enabled && (
-                <TraceSidebar 
-                    trace={trace} 
-                    loading={traceLoading} 
-                    error={traceError} 
+                <TraceSidebar
+                    trace={trace}
+                    loading={traceLoading}
+                    error={traceError}
                     projectId={projectId}
                     availableProjects={availableProjects}
                     refreshTrace={refreshTrace}
@@ -183,7 +203,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                             messagesEndRef={messagesEndRef}
                             scrollToBottom={scrollToBottom}
                         />
-                        
+
                         <ChatInput
                             ref={inputRef}
                             value={newMessage}
@@ -213,7 +233,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                             <h4 className="text-sm font-medium text-muted-foreground mb-1">URL</h4>
                             <p className="text-sm text-primary break-all">{selectedAgent.url}</p>
                         </div>
-                        
+
                         {/* Capabilities Section */}
                         <div>
                             <h4 className="text-sm font-medium text-muted-foreground mb-2">Capabilities</h4>
@@ -262,14 +282,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                                     </span>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                    {isStreamingEnabled 
+                                    {isStreamingEnabled
                                         ? "Responses will be streamed in real-time"
                                         : "Responses will be sent after completion"
                                     }
                                 </p>
                             </div>
                         )}
-                        
+
                         {currentConversation && (
                             <div>
                                 <h4 className="text-sm font-medium text-muted-foreground mb-2">Conversation</h4>
@@ -278,7 +298,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                                         <p className="text-sm text-foreground">{currentConversation.conversation_name}</p>
                                         <p className="text-xs text-muted-foreground">ID: {currentConversation.conversation_id}</p>
                                     </div>
-                                    
+
                                     {/* Context ID Management */}
                                     <div className="border rounded-lg p-3 bg-background/50">
                                         <div className="flex items-center justify-between mb-2">
@@ -311,7 +331,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                                                 )}
                                             </div>
                                         </div>
-                                        
+
                                         {editingContextId ? (
                                             <div className="space-y-2">
                                                 <Input
@@ -357,7 +377,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                                                 )}
                                             </div>
                                         )}
-                                        
+
                                         <p className="text-xs text-muted-foreground mt-2">
                                             Context ID is used to maintain conversation state across messages
                                         </p>

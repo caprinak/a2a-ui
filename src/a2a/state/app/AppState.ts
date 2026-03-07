@@ -1,7 +1,8 @@
 // AppState: Application State.
 // If you have a decorator or special handling similar to @me.stateclass,
 // you may create a custom decorator or simply note it in comments.
-import {SessionTask, StateConversation, StateMessage} from "@/a2a/state";
+import { SessionTask, StateConversation, StateMessage } from "@/a2a/state";
+import { ChatMessage } from "@/types/chat";
 
 export class AppState {
     sidenav_open: boolean = false;
@@ -10,6 +11,8 @@ export class AppState {
     current_conversation_id: string = "";
     conversations: StateConversation[] = [];
     messages: StateMessage[] = [];
+    // Map of conversation_id to ChatMessage array for persistence
+    conversation_messages: { [key: string]: ChatMessage[] } = {};
     task_list: SessionTask[] = [];
     background_tasks: { [key: string]: string } = {};
     message_aliases: { [key: string]: string } = {};

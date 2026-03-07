@@ -31,6 +31,7 @@ export const TabContent: React.FC<TabContentProps> = ({
             case "chat":
                 return (
                     <ChatContainer
+                        key={conversation?.conversation_id}
                         selectedAgent={selectedAgent}
                         showAgentDetails={showAgentDetails}
                         conversation={conversation}

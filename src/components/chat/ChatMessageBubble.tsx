@@ -10,32 +10,28 @@ interface ChatMessageBubbleProps {
 export const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({ message }) => {
     return (
         <div
-            className={`mb-4 ${
-                message.sender === "user" ? "flex flex-col items-end" : "flex flex-col items-start"
-            }`}
+            className={`mb-4 ${message.sender === "user" ? "flex flex-col items-end" : "flex flex-col items-start"
+                }`}
         >
             {/* Sender name */}
-            <div className={`text-xs text-muted-foreground mb-1 px-2 ${
-                message.sender === "user" ? "text-right" : "text-left"
-            }`}>
+            <div className={`text-xs text-muted-foreground mb-1 px-2 ${message.sender === "user" ? "text-right" : "text-left"
+                }`}>
                 {message.senderName}
             </div>
-            
+
             <div className="max-w-[70%] space-y-2">
                 {/* Message bubble */}
                 {message.content && (
-                    <div className={`relative px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap break-words ${
-                        message.sender === "user"
+                    <div className={`relative px-4 py-3 rounded-2xl text-sm whitespace-pre-wrap break-words ${message.sender === "user"
                             ? "bg-primary text-primary-foreground rounded-br-md"
                             : "bg-muted text-foreground rounded-bl-md"
-                    }`}>
-                        {message.content}
-                        
-                        {/* Timestamp */}
-                        <div className={`text-xs mt-1 ${
-                            message.sender === "user" ? "text-primary-foreground/70" : "text-muted-foreground"
                         }`}>
-                            {message.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        {message.content}
+
+                        {/* Timestamp */}
+                        <div className={`text-xs mt-1 ${message.sender === "user" ? "text-primary-foreground/70" : "text-muted-foreground"
+                            }`}>
+                            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
                     </div>
                 )}

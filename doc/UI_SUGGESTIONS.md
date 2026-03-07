@@ -289,10 +289,28 @@ npm install react-markdown rehype-highlight remark-gfm
 
 ---
 
+## 16. 💾 Chat History Persistence (Frontend) [PLANNED]
+
+**What**: Store and restore chat messages from `localStorage` so they persist when switching tabs or refreshing the page.
+
+**Why**: Currently, the `useChat` hook reinitializes with a default greeting every time the component remounts. This causes users to lose their conversation history immediately upon navigating away from the chat.
+
+**Implementation Plan**:
+1.  **State Upgrade**: Add `conversation_messages` to `AppState.ts` to map `conversationId` to `ChatMessage[]`.
+2.  **Hook Enhancement**: Update `useChat.ts` to accept `initialMessages` and provide an `onMessagesChange` callback.
+3.  **Persistence Layer**: Connect `ChatContainer.tsx` to the global `AppState` to save and load messages automatically.
+
+| Difficulty | Impact |
+|------------|--------|
+| ⭐⭐ Medium | 🔥🔥🔥 Critical |
+
+---
+
 ## Priority Roadmap
 
 | Priority | Suggestion | Effort | Impact |
 |----------|-----------|--------|--------|
+| 🏆 **CRITICAL** | **Chat History Persistence** | **Medium** | **CRITICAL** |
 | 🥇 P0 | Markdown Rendering in Chat | Easy | Very High |
 | 🥇 P0 | Toast Notifications | Easy | High |
 | 🥇 P0 | Empty States & Onboarding | Easy | High |

@@ -1,30 +1,55 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { ChatMessage } from "@/types/chat";
 import { A2AClient } from "@/a2a/client";
 import { TaskSendParams, Message, Part, Artifact, MessageSendParams, MessageSendConfiguration } from "@/a2a/schema";
 import { v4 as uuidv4 } from "uuid";
-import {AgentCard, Task, TaskQueryParams, TextPart} from "@/a2a/schema";
+import { AgentCard, Task, TaskQueryParams, TextPart } from "@/a2a/schema";
 
 interface UseChatProps {
     agentUrl?: string;
     isStreamingEnabled?: boolean;
     contextId?: string;
+    initialMessages?: ChatMessage[];
+    onMessagesChange?: (messages: ChatMessage[]) => void;
 }
 
-export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: UseChatProps = {}) => {
-    const [messages, setMessages] = useState<ChatMessage[]>([
-        {
-            id: 1,
-            sender: "agent",
-            content: "Hello, I am your agent. How can I assist you today?",
-            senderName: "Assistant",
-            timestamp: new Date(),
+export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId, initialMessages, onMessagesChange }: UseChatProps = {}) => {
+    const [messages, setMessages] = useState<ChatMessage[]>(() => {
+        if (initialMessages && initialMessages.length > 0) {
+            return initialMessages;
         }
-    ]);
-    
+        return [
+            {
+                id: 1,
+                sender: "agent",
+                content: "Hello, I am your agent. How can I assist you today?",
+                senderName: "Assistant",
+                timestamp: new Date(),
+            }
+        ];
+    });
+
+    // Use a ref to hold the callback to avoid infinite re-render loops
+    const onMessagesChangeRef = useRef(onMessagesChange);
+    onMessagesChangeRef.current = onMessagesChange;
+
+    // Track whether this is the initial mount to skip the first callback
+    const isInitialMount = useRef(true);
+
+    // Notify parent whenever messages change (but not on initial mount)
+    useEffect(() => {
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
+        if (onMessagesChangeRef.current) {
+            onMessagesChangeRef.current(messages);
+        }
+    }, [messages]);
+
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    
+
     // Refs для управления анимацией печатания
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const typingStateRef = useRef<{
@@ -59,19 +84,19 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
 
         const typeNextChar = () => {
             const state = typingStateRef.current;
-            
+
             if (state.currentIndex < state.fullText.length && state.isTyping) {
                 // Определяем следующий токен (слово или символ)
                 let nextIndex = state.currentIndex + 1;
-                
+
                 // Ускоряем печатание для пробелов и знаков препинания
                 const currentChar = state.fullText[state.currentIndex];
                 if (currentChar === ' ' || /[.,!?;:]/.test(currentChar)) {
                     speed = 10;
                 } else if (/[a-zA-Zа-яА-ЯёЁ0-9]/.test(currentChar)) {
                     // Для обычных символов пытаемся найти конец слова
-                    while (nextIndex < state.fullText.length && 
-                           /[a-zA-Zа-яА-ЯёЁ0-9]/.test(state.fullText[nextIndex])) {
+                    while (nextIndex < state.fullText.length &&
+                        /[a-zA-Zа-яА-ЯёЁ0-9]/.test(state.fullText[nextIndex])) {
                         nextIndex++;
                     }
                     speed = Math.random() * 40 + 20; // 20-60ms для слов
@@ -80,28 +105,28 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
                 }
 
                 const displayText = state.fullText.substring(0, nextIndex);
-                
-                setMessages(prev => 
-                    prev.map(msg => 
-                        msg.id === messageId 
+
+                setMessages(prev =>
+                    prev.map(msg =>
+                        msg.id === messageId
                             ? { ...msg, content: displayText + "▋" } // Добавляем курсор
                             : msg
                     )
                 );
 
                 typingStateRef.current.currentIndex = nextIndex;
-                
+
                 typingTimeoutRef.current = setTimeout(typeNextChar, speed);
             } else {
                 // Завершаем печатание
-                setMessages(prev => 
-                    prev.map(msg => 
-                        msg.id === messageId 
+                setMessages(prev =>
+                    prev.map(msg =>
+                        msg.id === messageId
                             ? { ...msg, content: state.fullText } // Убираем курсор
                             : msg
                     )
                 );
-                
+
                 typingStateRef.current.isTyping = false;
             }
         };
@@ -115,12 +140,12 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
             clearTimeout(typingTimeoutRef.current);
             typingTimeoutRef.current = null;
         }
-        
+
         const state = typingStateRef.current;
         if (state.isTyping && state.messageId) {
-            setMessages(prev => 
-                prev.map(msg => 
-                    msg.id === state.messageId 
+            setMessages(prev =>
+                prev.map(msg =>
+                    msg.id === state.messageId
                         ? { ...msg, content: state.fullText }
                         : msg
                 )
@@ -155,7 +180,7 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
             kind: "message",
             ...(contextId && { contextId: contextId }), // Условно добавляем contextId
             metadata: {
-                timestamp: chatMessage.timestamp.toISOString(),
+                timestamp: new Date(chatMessage.timestamp).toISOString(),
                 senderName: chatMessage.senderName,
                 originalId: chatMessage.id
             }
@@ -165,10 +190,10 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
     // Функция для получения истории последних 10 сообщений в формате A2A
     const getMessageHistory = useCallback((currentMessages: ChatMessage[]): Message[] => {
         // Берем последние 10 сообщений (исключая приветственное сообщение если это единственное)
-        const messagesToInclude = currentMessages.length === 1 && currentMessages[0].id === 1 
+        const messagesToInclude = currentMessages.length === 1 && currentMessages[0].id === 1
             ? [] // Не включаем начальное приветственное сообщение
             : currentMessages.slice(-10); // Берем последние 10 сообщений
-        
+
         return messagesToInclude.map(convertChatMessageToA2AMessage);
     }, [convertChatMessageToA2AMessage]);
 
@@ -176,10 +201,10 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
     const sendMessageSync = useCallback(async (content: string) => {
         const client = new A2AClient(agentUrl!, window.fetch.bind(window));
         const messageId = uuidv4();
-        
+
         // Получаем историю сообщений
         const messageHistory = getMessageHistory(messages);
-        
+
         // Создаем конфигурацию
         const configuration: MessageSendConfiguration = {
             acceptedOutputModes: ["text"],
@@ -231,7 +256,7 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
             // Если это Task (имеет artifacts на верхнем уровне)
             if ('artifacts' in responseMessage && Array.isArray(responseMessage.artifacts)) {
                 responseArtifacts = responseMessage.artifacts;
-                
+
                 // Извлекаем текст из всех text parts во всех artifacts
                 for (const artifact of responseMessage.artifacts) {
                     if (artifact.parts) {
@@ -264,10 +289,10 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
         const client = new A2AClient(agentUrl!, window.fetch.bind(window));
         const taskId = uuidv4();
         const messageId = uuidv4();
-        
+
         // Получаем историю сообщений
         const messageHistory = getMessageHistory(messages);
-        
+
         // Создаем message объект с условным включением contextId
         const streamMessage: Message = {
             messageId: messageId,
@@ -326,10 +351,10 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
             // Обрабатываем стрим
             for await (const event of client.sendTaskSubscribe(sendParams)) {
                 console.log("Streaming event:", event);
-                
+
                 if (event && typeof event === 'object') {
                     let newTextChunk = "";
-                    
+
                     // Обработка TaskStatusUpdateEvent
                     if ('status' in event && event.status) {
                         const status = event.status as any;
@@ -338,17 +363,17 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
                                 .filter((part: any) => part.kind === "text")
                                 .map((part: any) => part.text)
                                 .join("");
-                            
+
                             if (textParts) {
                                 newTextChunk = textParts;
                             }
                         }
                     }
-                    
+
                     // Обработка TaskArtifactUpdateEvent
                     if ('artifact' in event && event.artifact) {
                         const artifact = event.artifact as any;
-                        
+
                         // Добавляем artifact к накопленным
                         const existingIndex = accumulatedArtifacts.findIndex(a => a.artifactId === artifact.artifactId);
                         if (existingIndex >= 0) {
@@ -356,25 +381,25 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
                         } else {
                             accumulatedArtifacts.push(artifact);
                         }
-                        
+
                         // Обновляем сообщение с новыми artifacts
                         if (agentMessageId) {
-                            setMessages(prev => 
-                                prev.map(msg => 
-                                    msg.id === agentMessageId 
+                            setMessages(prev =>
+                                prev.map(msg =>
+                                    msg.id === agentMessageId
                                         ? { ...msg, artifacts: [...accumulatedArtifacts] }
                                         : msg
                                 )
                             );
                         }
-                        
+
                         // Извлекаем текст из artifact для печатания
                         if (artifact.parts) {
                             const textParts = artifact.parts
                                 .filter((part: any) => part.kind === "text")
                                 .map((part: any) => part.text)
                                 .join("");
-                            
+
                             if (textParts) {
                                 newTextChunk = textParts;
                             }
@@ -385,7 +410,7 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
                     if (newTextChunk && newTextChunk !== accumulatedText) {
                         // Останавливаем предыдущую анимацию
                         stopTyping();
-                        
+
                         // Определяем новую часть текста
                         let textToAdd = "";
                         if (newTextChunk.startsWith(accumulatedText)) {
@@ -394,26 +419,26 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
                             textToAdd = newTextChunk;
                             accumulatedText = "";
                         }
-                        
+
                         accumulatedText += textToAdd;
-                        
+
                         // Запускаем анимацию печатания для нового текста
                         if (agentMessageId && textToAdd) {
                             simulateTyping(agentMessageId, accumulatedText);
                         }
                     }
-                        
+
                     // Проверяем завершение
                     if ('final' in event && event.final) {
                         console.log("Streaming completed");
                         // Завершаем анимацию и показываем полный текст с artifacts
                         if (agentMessageId) {
                             stopTyping();
-                            setMessages(prev => 
-                                prev.map(msg => 
-                                    msg.id === agentMessageId 
-                                        ? { 
-                                            ...msg, 
+                            setMessages(prev =>
+                                prev.map(msg =>
+                                    msg.id === agentMessageId
+                                        ? {
+                                            ...msg,
                                             content: accumulatedText,
                                             artifacts: accumulatedArtifacts.length > 0 ? accumulatedArtifacts : undefined,
                                             parts: accumulatedParts.length > 0 ? accumulatedParts : undefined
@@ -431,9 +456,9 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
             // Останавливаем анимацию и показываем ошибку
             stopTyping();
             if (agentMessageId) {
-                setMessages(prev => 
-                    prev.map(msg => 
-                        msg.id === agentMessageId 
+                setMessages(prev =>
+                    prev.map(msg =>
+                        msg.id === agentMessageId
                             ? { ...msg, content: `Streaming error: ${error instanceof Error ? error.message : String(error)}` }
                             : msg
                     )
@@ -446,10 +471,10 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
 
     const sendMessage = useCallback(async (content: string) => {
         if (!content.trim() || isLoading || !agentUrl) return;
-        
+
         // Останавливаем любую текущую анимацию печатания
         stopTyping();
-        
+
         const userMessage: ChatMessage = {
             id: messages.length + 1,
             sender: "user",
@@ -468,7 +493,7 @@ export const useChat = ({ agentUrl, isStreamingEnabled = false, contextId }: Use
                 await sendMessageStream(content);
             } else {
                 const syncResponse = await sendMessageSync(content);
-                
+
                 setMessages(prev => {
                     const agentMessage: ChatMessage = {
                         id: prev.length + 1,
